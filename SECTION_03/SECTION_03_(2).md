@@ -139,7 +139,8 @@ group by
 
 #### 집약 함수를 적용한 값과 집약 전의 값을 동시에 다루기
 
-SQL : 2003 이후에 정의된 윈도 함수가 지원되는 DBMS 라면,  윈도 함수를 사용해서 쉽고 효율적으로 집약 함수의 결과와 원래 값을 조합할 수 있습니다. 
+SQL : 2003 이후에 정의된 윈도 함수가 지원되는 DBMS 라면,  윈도 함수를 사용해서 쉽고 효율적으로 
+집약 함수의 결과와 원래 값을 조합할 수 있습니다. 
 
 다음 코드에서는 개별 리뷰 점수(avg_score) 와 사용자 평균 리뷰 점수(user_avg_score) 의 차이를 구하는 예입니다.
 
@@ -176,10 +177,10 @@ from
 
 <br>
 
-<span style="color:red;font-weight:bold">집약 함수로 윈도 함수를 사용하려면, 집약 함수 뒤에 OVER 구문을 붙이고 여기에 윈도 함수를 지정</span>합니다.
+<span style="color:red;font-weight:bold">집약 함수로 윈도 함수를 사용하려면, 집약 함수 뒤에 OVER 구문을 붙이고 여기에 윈도 함수를 지정</span>합니다.<br>
 OVER 구문에 매개 변수를 지정하지 않으면 테이블 전체에 집약 함수를 적용합니다.
 <br>
-매개 변수에 PARTITION BY \<컬럼 이름> 을 지정하면 해당 컬럼 값을 기반으로 그룹화하고 집약 함수를 적용합니다. 참고로 <span style="color:red;font-weight:bold">집약 함수의 결과와 원래 값을 조합해서 계산</span>하므로 score와 user_id들의 score 평균값 차이도 계산 할 수 있었습니다.
+매개 변수에 PARTITION BY \<컬럼 이름> 을 지정하면 해당 컬럼 값을 기반으로 그룹화하고 집약 함수를 적용합니다. <br>참고로 <span style="color:red;font-weight:bold">집약 함수의 결과와 원래 값을 조합해서 계산</span>하므로 score와 user_id들의 score 평균값 차이도 계산 할 수 있었습니다.
 <br>
 
 <br>
@@ -507,6 +508,8 @@ from
 
 <br>
 
+<br>
+
 ### [ 3 ]  세로 기반 데이터를 가로 기반으로 변환하기
 
 <br>
@@ -515,6 +518,8 @@ SQL은 행(레코드) 기반으로 처리하는 것이 기본입니다. 따라�
 <br>
 
 이번 절에서는 행 단위로 저장된 '세로 기반'을, 열 또는 쉼표로 구분된 문자열 등의 '가로 기반'으로 변환하는 방법을 설명하겠습니다.
+
+<br>
 
 <br>
 
@@ -548,6 +553,898 @@ SQL 에서 열은 '고정적'이어야 합니다.  따라서 열로 전개할 �
 
 날짜별로 이러한 지표들의 추이를 쉽게 볼 수 있게, 열로 전개해봅시다.
 
+<br>
+
+<br>
+
+**코드 7-10**  행으로 저장된 지표 값을 열로 변환하기
+
+```sql
+select
+ dt
+ , max(case when indicator = 'impressions' then val end) as impressions
+ , max(case when indicator = 'sessions' then val end) as sessions
+ , max(case when indicator = 'users' then val end) as users
+from
+ daily_kpi
+group by dt
+order by dt
+;
+```
 
 
-p.106 이어서 작업하기
+
+| dt         | impressions | sessions | users |
+| ---------- | ----------- | -------- | ----- |
+| 2017-01-01 | 1800        | 500      | 200   |
+| 2017-01-02 | 2000        | 700      | 250   |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+#### 행을 쉼표로 구분한 문자열로 집약하기
+
+앞서 언급했던 것처럼 행을 열로 변환하는 방법은 미리 열의 종류와 수를 알고 있을 때만 사용할 수 있습니다.
+따라서 열의 종류와 수를 모른다면 사용할 수 없죠.<br>
+
+<br>
+
+예를 들어 아래와 같은 상품 구매 상세 로그를 생각해봅시다. 한 번의 주문으로 여러 개의 상품을 구매했을 때,
+이를 상품별로 레코드를 나누어 저장하는 테이블입니다.
+구매 아이디로 집약하고 싶어도 상품을 몇개 샀는지 알 수 없기 때문에 전과 같은 방법은 사용할 수 없습니다.
+
+<br>
+
+<br>
+
+**데이터 7- 4**  구매 상세 로그(purchase_detail_log) 테이블
+
+| purchase_id | product_id | price |
+| ----------- | ---------- | ----- |
+| 100001      | A001       | 3000  |
+| 100001      | A002       | 4000  |
+| 100001      | A003       | 2000  |
+| 100002      | D001       | 5000  |
+| 100002      | D002       | 3000  |
+| 100003      | A001       | 3000  |
+
+<br>
+
+<br>
+
+<br>
+
+미리 열의 수를 정할 수 없는 경우에는 데이터를 쉼표 등으로 구분한 문자열로 변환하는 방법을 생각해볼 수 있습니다.
+다음 코드 예를 같이 실행해보겠습니다. 참고로 행을 문자열로 집약하는 함수는 미들웨어(DBMS) 마다 다릅니다.
+
+<br>
+
+<br>
+
+**코드 7 - 11**  행을 집약해서 쉼표로 구분된 문자열로 변환하기
+
+```sql
+select
+ purchase_id
+ , string_agg(product_id,', ') as product_ids
+ , sum(price) as amount
+from purchase_detail_log
+group by purchase_id
+order by purchase_id
+;
+```
+
+<br>
+
+| purchase_id | product_ids      | amount |
+| ----------- | ---------------- | ------ |
+| 100001      | A001, A002, A003 | 9000   |
+| 100002      | D001, D002       | 8000   |
+| 100003      | A001             | 3000   |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 4 ]  가로 기반 데이터를 세로 기반으로 변환하기
+
+세로 기반 데이터를 가로 기반으로 변환해서 가공이 쉬운 데이터 형식으로 만드는 법을 알아보겠습니다.
+
+<br>
+
+<br>
+
+#### 열로 표현된 값을 행으로 변환하기
+
+<br>
+
+**데이터 7 - 5**  4분기 매출(quarterly_sales) 테이블
+| year | q1    | q2    | q3    | q4    |
+| ---- | ----- | ----- | ----- | ----- |
+| 2015 | 82000 | 83000 | 78000 | 83000 |
+| 2016 | 85000 | 85000 | 80000 | 81000 |
+| 2017 | 92000 | 81000 |       |       |
+
+<br>
+
+위 테이블을 연도,  4분기 레이블,  매출이라는 3개의 컬럼을 가진 테이블로 변환해보겠습니다.
+현재 테이블을 보면 알겠지만, 하나의 레코드는 q1~q4 까지 모두 4개의 데이터로 구성됩니다. 
+
+행으로 **전개할 데이터 수가 고정되어 있다면**, **그러한 데이터 수와 같은 수의 일련 번호를 가진 피벗 테이블을 만들고 CROSS JOIN 하면 됩니다**.
+
+<br>
+
+다음 코드를 실행해서 확인해보겠습니다.
+
+<br>
+
+**코드 7 - 12**  일련 번호를 가진 피벗 테이블을 사용해 행으로 변환하는 쿼리
+
+```sql
+select
+ q.year
+ -- Q1 ~ Q4 까지의 레이블 이름 출력하기
+ ,case 
+ 	when p.idx = 1 then 'q1'
+ 	when p.idx = 2 then 'q2'
+ 	when p.idx = 3 then 'q3'
+ 	when p.idx = 4 then 'q4'
+  end as quarter
+ -- Q1 에서  Q4 까지의 매출 출력하기
+ , case
+ 	when p.idx = 1 then q.q1
+ 	when p.idx = 2 then q.q2
+ 	when p.idx = 3 then q.q3
+ 	when p.idx = 4 then q.q4
+  end as sales
+from 
+ quarterly_sales as q
+ cross join
+ -- 행으로 전개하고 싶은 열의 수만큼 순번 테이블 만들기
+ (
+ 			  select 1 as idx
+ 	union all select 2 as idx
+ 	union all select 3 as idx
+ 	union all select 4 as idx
+ ) as p
+;
+```
+
+<br>
+
+| year | quarter | sales  |
+| ---- | ------- | ------ |
+| 2015 | q1      | 82000  |
+| 2015 | q2      | 83000  |
+| 2015 | q3      | 78000  |
+| 2015 | q4      | 83000  |
+| 2016 | q1      | 85000  |
+| 2016 | q2      | 85000  |
+| 2016 | q3      | 80000  |
+| 2016 | q4      | 81000  |
+| 2017 | q1      | 92000  |
+| 2017 | q2      | 81000  |
+| 2017 | q3      | [NULL] |
+| 2017 | q4      | [NULL] |
+
+<br>
+
+<br>
+
+<br>
+
+#### 임의의 길이를 가진 배열을 행으로 전개하기
+
+<br>
+
+고정 길이의 행으로 전개하는 것은 비교적 간단합니다. 하지만 길이가 확정되지 않으면 좀 복잡해집니다.
+
+<br>
+
+**데이터 7 - 6**  구매 로그(purchase_log) 테이블
+
+```sql
+DROP TABLE IF EXISTS purchase_log;
+CREATE TABLE purchase_log (
+    purchase_id integer
+  , product_ids varchar(255)
+);
+
+INSERT INTO purchase_log
+VALUES
+    (100001, 'A001,A002,A003')
+  , (100002, 'D001,D002')
+  , (100003, 'A001')
+;
+```
+
+<br>
+
+| purchase_id | product_ids    |
+| ----------- | -------------- |
+| 100001      | A001,A002,A003 |
+| 100002      | D001,D002      |
+| 100003      | A001           |
+
+<br>
+
+위와 같은 테이블이 있고 상품 ID들을 레코드로 하나하나 전개하는 방법을 살펴보겠습니다.
+
+<br>
+
+만약 미들웨어가 테이블 함수를 구현하고 있다면, 배열을 쉽게 레코드로 전개할 수 있습니다. 이때 테이블 함수란
+함수의 리턴값이 테이블인 함수를 의미합니다.
+
+<br>
+
+대표적인 테이블 함수로는 PostgreSQL과 BigQuery의 unnest 함수,  Hive와 SparkSQL의 explode 함수가 있습니다. unnest를 실행해보겠습니다.
+
+<br>
+
+**코드 7 - 13**   테이블 함수를 사용해 배열을 행으로 전개하는 쿼리
+
+```sql
+select unnest(array['A001','A002','A003']) as purchase_id;
+```
+
+<br>
+
+| purchase_id |
+| ----------- |
+| A001        |
+| A002        |
+| A003        |
+
+<br>
+
+<br>
+
+이러한 테이블 함수를 사용해서 방금 위에서 본 [ 데이터 7 - 6 ]의 구매 로그를 레코드로 전개해보겠습니다.
+
+그런데 이때 주의할 점이 있는데,  일반적인 select 구문 내부에는 레코드에 포함된 스칼라 값을 리턴하는 함수와
+컬럼 이름을 지정할 수 있지만, 테이블 함수는 **테이블**을 리턴합니다.
+
+스칼라 값과 테이블 함수의 리턴 값을 동시에 추출하고 싶은 경우, 테이블 함수를 from 구문 내부에 작성하고
+join 구문을 사용해 원래 테이블과 테이블 함수의 리턴 값을 결합해야합니다.
+
+<br><br>
+
+**코드 7 - 14**  테이블 함수를 사용해 쉼표로 구분된 문자열 데이터를 행으로 전개하는 쿼리
+
+```sql
+select
+  purchase_id
+  , product_id
+from
+  purchase_log as p
+cross join 
+  unnest(string_to_array(product_ids,',')) as product_id
+;
+```
+
+<br>
+
+| purchase_id | product_id |
+| ----------- | ---------- |
+| 100001      | A001       |
+| 100001      | A002       |
+| 100001      | A003       |
+| 100002      | D001       |
+| 100002      | D002       |
+| 100003      | A001       |
+
+<br>
+
+<br>
+
+<br>
+
+참고로 PostgreSQL 의 경우 Select 구문 내부에 스칼라 값과 테이블 함수를 동시에 지정할 수 있습니다.
+
+<br>
+
+**코드 7 - 15**  PostgreSQL 에서 쉼표로 구분된 데이터를 행으로 전개하는 쿼리
+
+```sql
+select
+  purchase_id
+  , regexp_split_to_table(product_ids,',') as purchase_id
+from
+  purchase_log;
+```
+
+<br>
+
+| purchase_id | purchase_id |
+| ----------- | ----------- |
+| 100001      | A001        |
+| 100001      | A002        |
+| 100001      | A003        |
+| 100002      | D001        |
+| 100002      | D002        |
+| 100003      | A001        |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+## 8강 여러 개의 테이블 조작하기
+
+<br>
+
+데이터 분석 실무에서는 여러 개의 테이블을 기반으로 데이터를 분석해야하는 경우가 많습니다.
+
+따라서 어떤 경우에 어떤 이유로 여러 개의 테이블에 조작해야하는지 알아보겠습니다.
+
+추가로 여러 개의 테이블을 조작할 때는 SQL이 복잡해지기 쉬운데, 이런 SQL을 간단하고 가독성 높게 작성하는
+
+방법과 부족한 데이터를 보완하는 방법 등도 함께 소개하겠습니다.
+
+<br>
+
+<br>
+
+<br>
+
+### [ 1 ]  여러 개의 테이블을 세로로 결합하기
+
+여러  테이블에 분산된 "비슷한 형식의 데이터"에 같은 처리를 해야 하는 경우가 있습니다.
+이럴 때는 union all ,  union (distinct)  를 사용하면 되는데, 다음과 같은 예제 테이블이 있다고 가정하겠습니다.
+
+<br>
+
+
+
+데이터 8 - 1  애플리케이션1의 사용자 마스터 테이블 / 데이터 8 - 2 애플리케이션2의 사용자 마스터 테이블
+
+![app1_mst_users](SECTION_03_IMG/dbeaver_A9HdYJGT55.png)  /   ![app2_mst_users](SECTION_03_IMG/dbeaver_KqHGpaltUQ.png) 
+
+
+
+두 테이블은 상당히 비슷한 구조이며,  이 두 테이블에 일괄적인 처리가 하고 싶으면, 다음 코드처럼 UNION ALL 구문을
+
+사용해 여러 개의 테이블을 세로로 결합하면 좋습니다. 결합할 때는 테이블의 컬럼이 완전히 일치해야 하므로,
+
+한쪽 테이블에만 존재하는 컬럼은 phone 컬럼처럼 select 구문으로 제외하거나, email 컬럼처럼 디폴트 값을 줘야 합니다.
+
+<br>
+
+<br>
+
+**코드 8 - 1**  UNION ALL 구문을 사용해 테이블을 세로로 결합하는 쿼리
+
+```sql
+select 'app1' as app_name, user_id, name, email from app1_mst_users
+union all
+select 'app2' as app_name, user_id, name, null as email from app2_mst_users;
+```
+
+<br>
+
+| app_name | user_id | name   | email              |
+| -------- | ------- | ------ | ------------------ |
+| app1     | U001    | Sato   | sato@example.com   |
+| app1     | U002    | Suzuki | suzuki@example.com |
+| app2     | U001    | Ito    |                    |
+| app2     | U002    | Tanaka |                    |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 2 ]  여러 개의 테이블을 가로로 정렬하기
+
+하다보면 여러 개의 테이블을 가로로 붙이고 서로 데이터를 비교하거나 값을 조합하는 경우가 있습니다.
+
+아래 3개의 예시 테이블을 통해서 그 작업을 해보겠습니다.
+
+<br>
+
+**데이터 8 - 3**  카테고리 마스터(mst_categories)
+
+| category_id | name |
+| ----------- | ---- |
+| 1           | dvd  |
+| 2           | cd   |
+| 3           | book |
+
+<br>
+
+**데이터 8 - 4**  카테고리별 매출(category_sales) 테이블
+| category_id | sales  |
+| ----------- | ------ |
+| 1           | 850000 |
+| 2           | 500000 |
+
+<br>
+
+**데이터 8 - 5**  카테고리별 상품 매출 순위(product_sale_ranking) 테이블
+
+| category_id | rank | product_id | sales |
+| ----------- | ---- | ---------- | ----- |
+| 1           | 1    | D001       | 50000 |
+| 1           | 2    | D002       | 20000 |
+| 1           | 3    | D003       | 10000 |
+| 2           | 1    | C001       | 30000 |
+| 2           | 2    | C002       | 20000 |
+| 2           | 3    | C003       | 10000 |
+
+<br>
+
+<br>
+
+주로 이런 테이블들을 조합하기 위해서는 JOIN을 사용합니다.
+
+하지만 무조건 join을 하면 inner join을 사용하는 것이여서,  데이터가 출력이 안되거나, 중복되는 데이터가 출력될 수도 있습니다.
+
+<br>
+
+그러니 left outer join를 적절히 사용해야합니다. 아래와 같이 말이죠.
+
+<br>
+
+**코드 8 - 3**  마스터 테이블의 행 수를 변경하지 않고 여러 개의 테이블을 가로로 정렬하는 쿼리
+
+```sql
+select
+	m.category_id
+	, m."name"
+	, s.sales
+	, r.product_id as top_sale_product
+from
+	mst_categories as m
+  left join
+	category_sales as s
+	on m.category_id = s.category_id
+  left join
+	product_sale_ranking as r
+	on m.category_id = r.category_id
+	and r.rank = 1
+;
+```
+
+<br>
+
+| category_id | name | sales  | top_sale_product |
+| ----------- | ---- | ------ | ---------------- |
+| 1           | dvd  | 850000 | D001             |
+| 2           | cd   | 500000 | C001             |
+| 3           | book |        |                  |
+
+<br>
+
+<br>
+
+select 구문 내부에서 사관 서브 쿼리를 사용할 수 있는 미들웨어의 경우, JOIN을 사용하지 않고 여러 테이블 값을 가로로 정렬할 수 있습니다. 
+
+다음 코드는 방금 위에서 join을 통해서 만든 결과물과 같습니다.
+
+<br>
+
+**코드 8 - 4**  상관 서브쿼리로 여러 개의 테이블을 가로로 정렬하는 쿼리
+
+```sql
+select
+ m.category_id
+ , m."name"
+ -- 상관 서브 쿼리를 사용해 카테고리별로 매출액 추출하기
+ , ( select s.sales
+ 	from category_sales as s
+ 	where m.category_id = s.category_id
+ ) as sales
+ -- 상관 서브쿼리를 사용해 카테고리별로 최고 매출 상품을
+ -- 하나 추출하기(순위로 따로 압축하지 않아도 됨)
+ , ( select r.product_id
+ 	 from product_sale_ranking as r
+ 	 where m.category_id = r.category_id
+ 	 order by sales desc
+ 	 limit 1
+ ) as top_sale_product
+from
+ mst_categories as m
+;
+```
+
+<br>
+
+| category_id | name | sales  | top_sale_product |
+| ----------- | ---- | ------ | ---------------- |
+| 1           | dvd  | 850000 | D001             |
+| 2           | cd   | 500000 | C001             |
+| 3           | book |        |                  |
+
+<br>
+
+이렇게 서브 쿼리를 쓰면,  마스터 테이블의 로우의 갯수가 달라지는 것을 크게 신경 쓰지 않아도 된다. 
+즉 테이블 조합 과정에서 데이터가 누락되거나 중복되는 사항이 발생하는 경우는 신경 쓰지 않아도 된다는 의미다.
+
+그리고  [ 코드 8 - 2 ] 에서는 카테고리별 매출 테이블에 카테고리들의 순위(rank) 를 사전에 컬럼으로 저장했지만, 
+상관 서브쿼리의 경우 내부에서 order by 구문과 limit 구문을 사용하면 사전 처리를 하지 않고도 데이터를 하나로 압축할 수 있다.
+
+<br>
+
+<br>
+
+<br>
+
+참고) 만약 위의 서브 상관 쿼리에서 억지로 2개의 결과를 내면?
+
+```sql
+ , ( select r.product_id
+ 	 from product_sale_ranking as r
+ 	 where m.category_id = r.category_id
+ 	 order by sales desc
+ 	 limit 2  -- 억지로 2개의 값을 뽑아냄
+ ) as top_sale_product
+```
+
+<br>
+
+에러 난다.
+
+<img src="SECTION_03_IMG/dbeaver_sM3R1SnrWP.png" alt="dbeaver_sM3R1SnrWP" style="border: 2px solid black;" /> 
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 3 ]  조건 플래그를 0과 1로 표현하기
+
+여기서는 이전에 설명한 여러 개의 테이블을 가로로 정렬하는 방법을 응용해서 마스터 테이블에 다양한 데이터를 집약하고,
+마스터 테이블의 속성 조건을 0 또는 1 이라는 플래그로 표현하는 방법을 소개하겠습니다.
+
+<br>
+
+예를 들어 다음과 같이 신용카드 벊를 포함한 마스터 테이블( 데이터 8 - 6 ) 에 구매 로그 테이블 ( 데이터 8 - 7 )을 결합해서
+사용자들의 '신용카드 번호 등록 여부', '구매 이력 여부'라는 두 가지 조건을 0과 1로 표현하는 방법을 알아보겠습니다.
+
+<br>
+
+<br>
+
+**데이터 8 - 6**  신용카드 번호를 포함한 사용자 마스터(mst_users_with_card_number) 테이블
+| user_id | card_number         |
+| ------- | ------------------- |
+| U001    | 1234-xxxx-xxxx-xxxx |
+| U002    |                     |
+| U003    | 5678-xxxx-xxxx-xxxx |
+
+<br>
+
+**데이터 8 - 7**  구매 로그(purchase_log) 테이블
+| purchase_id | user_id | amount | stamp               |
+| ----------- | ------- | ------ | ------------------- |
+| 10001       | U001    | 200    | 2017-01-30 10:00:00 |
+| 10002       | U001    | 500    | 2017-02-10 10:00:00 |
+| 10003       | U001    | 200    | 2017-02-12 10:00:00 |
+| 10004       | U002    | 800    | 2017-03-01 10:00:00 |
+| 10005       | U002    | 400    | 2017-03-02 10:00:00 |
+
+```sql
+DROP TABLE IF EXISTS purchase_log;
+CREATE TABLE purchase_log (
+    purchase_id integer
+  , user_id     varchar(255)
+  , amount      integer
+  , stamp       varchar(255)
+);
+
+INSERT INTO purchase_log
+VALUES
+    (10001, 'U001', 200, '2017-01-30 10:00:00')
+  , (10002, 'U001', 500, '2017-02-10 10:00:00')
+  , (10003, 'U001', 200, '2017-02-12 10:00:00')
+  , (10004, 'U002', 800, '2017-03-01 10:00:00')
+  , (10005, 'U002', 400, '2017-03-02 10:00:00')
+;
+```
+
+
+
+<br>
+
+<br>
+
+사용자 마스터에 구매 로그를 결합할 때 LEFT JOIN 을 사용한 뒤 사용자 ID로 group by  하면, 
+사용자 마스터의 레코드 수를 그대로 유지한 상태로 구매 로그 정보를 겨합할 수 있습니다.
+
+이렇게 얻은 테이블을 기반으로 조건 플래그 0과 1을 줍니다.
+
+이때 사용할 수 있는 방법은  **CASE** 와 **SIGN 함수** 입니다.
+
+다음 코드를 실행해서  확인합니다.
+
+<br>
+
+<br>
+
+과정 - 1 ( group by 하기 전 )
+
+```sql
+select 
+	*
+from 
+	mst_users_with_card_number as m
+  left join
+  	purchase_log as p
+  	on m.user_id = p.user_id 	
+;
+```
+
+| user_id | card_number         | purchase_id | user_id | amount | stamp               |
+| ------- | ------------------- | ----------- | ------- | ------ | ------------------- |
+| U001    | 1234-xxxx-xxxx-xxxx | 10003       | U001    | 200    | 2017-02-12 10:00:00 |
+| U001    | 1234-xxxx-xxxx-xxxx | 10002       | U001    | 500    | 2017-02-10 10:00:00 |
+| U001    | 1234-xxxx-xxxx-xxxx | 10001       | U001    | 200    | 2017-01-30 10:00:00 |
+| U002    |                     | 10005       | U002    | 400    | 2017-03-02 10:00:00 |
+| U002    |                     | 10004       | U002    | 800    | 2017-03-01 10:00:00 |
+| U003    | 5678-xxxx-xxxx-xxxx |             |         |        |                     |
+
+<br>
+
+과정 - 2 ( group by 후)
+
+```sql
+select
+ 	m.user_id
+ 	, m.card_number
+ 	, count(p.user_id) as purchase_count
+	-- 신용 카드 번호를 등록한 경우 1, 등록하지 않은 경우 0으로 표현하기
+ 	, case when m.card_number is not null then 1 else 0 end as has_card
+	-- 구매 이력이 있는 경우 1, 없는 경우 0으로 표현하기
+ 	, sign(count(p.user_id)) as has_purchased
+from
+	mst_users_with_card_number as m
+ 	left join
+ 	purchase_log as p
+ 	on m.user_id = p.user_id
+group by m.user_id, m.card_number
+order by user_id
+;
+```
+
+| user_id | card_number         | purchase_count | has_card | has_purchased |
+| ------- | ------------------- | -------------- | -------- | ------------- |
+| U001    | 1234-xxxx-xxxx-xxxx | 3              | 1        | 1             |
+| U002    |                     | 2              | 0        | 1             |
+| U003    | 5678-xxxx-xxxx-xxxx | 0              | 1        | 0             |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 4 ]  계산한 테이블에 이름 붙여 재사용하기
+
+복잡한 처리를 하는 SQL 문을 작성할 때는 서브 쿼리의 중첩이 많아집니다. 비슷한 처리를 여러번 하는 경우도 있는데요. 
+
+이렇게 되면 쿼리의 가독성이 굉장히 낮아집니다. 이때  SQL99 에서 도입된 공통 테이블 식 (CTE: Common Table Expression) 
+을 사용하면 일시적인 테이블에 이름을 붙여 재사용할 수 있습니다. 그리고 이를 활용하면 코드의 가독성이 크게 높아집니다.
+
+<br>
+
+<br>
+
+데이터 8 - 8  카테고리별 상품 매출(product_sales)  테이블
+| category_name | product_id | sales |
+| ------------- | ---------- | ----- |
+| dvd           | D001       | 50000 |
+| dvd           | D002       | 20000 |
+| dvd           | D003       | 10000 |
+| cd            | C001       | 30000 |
+| cd            | C002       | 20000 |
+| cd            | C003       | 10000 |
+| book          | B001       | 20000 |
+| book          | B002       | 15000 |
+| book          | B003       | 10000 |
+| book          | B004       | 5000  |
+
+<br>
+
+<br>
+
+이번 절에는 위의 테이블을 통해서 카테고리별로 상품 순위를 한번에 볼 수 있는 형식으로 변환해보겠습니다.
+
+<br>
+
+**코드 8 - 6**  카테고리별 순위를 추가한 테이블에 이름 붙이기
+
+```sql
+with 
+product_sale_ranking as (
+  select
+  	category_name
+  	, product_id
+  	, sales
+  	, row_number() over(partition by category_name order by sales desc) as rank
+  from
+  	product_sales
+) 
+select * 
+from product_sale_ranking;
+```
+
+<br>
+
+| category_name | product_id | sales | rank |
+| ------------- | ---------- | ----- | ---- |
+| book          | B001       | 20000 | 1    |
+| book          | B002       | 15000 | 2    |
+| book          | B003       | 10000 | 3    |
+| book          | B004       | 5000  | 4    |
+| cd            | C001       | 30000 | 1    |
+| cd            | C002       | 20000 | 2    |
+| cd            | C003       | 10000 | 3    |
+| dvd           | D001       | 50000 | 1    |
+| dvd           | D002       | 20000 | 2    |
+| dvd           | D003       | 10000 | 3    |
+
+<br>
+
+위에서 현재 CTE 구문을 사용해 만들어진 테이블에 product_sale_ranking 이라는 이름을 붙입니다. 
+<span style="color:red;font-weight:bold">CTE 구문은 with 구문을 사용해 'WITH  \<테이블 이름>  AS  (SELECT ~)'  형태로 사용하는 구문</span>입니다.
+
+<br>
+
+<br>
+
+카테고리들의 매출에 순위를 붙인 위의 product_sale_ranking 테이블이 만들어졌으면, 
+테이블을 자기 결합해서 카테고리의 수만큼 넓게 펼칩니다. 다만 카테고리들에 포함된 상품의 수가 다르므로
+, 최대 상품 수에 맞는 결과를 계싼할 수 있게 순위의 유니크한 목록을 계산해두겠습니다.
+
+<br>
+
+**코드 8 - 7**   카테고리들의 순위에서 유니크한 순위 목록을 계싼하는 쿼리
+
+```sql
+with 
+product_sale_ranking as (
+  select
+  	category_name
+  	, product_id
+  	, sales
+  	, row_number() over(partition by category_name order by sales desc) as rank
+  from
+  	product_sales
+), mst_rank as (
+  select distinct rank
+  from product_sale_ranking psr
+)
+select * from mst_rank;
+```
+
+| rank |
+| ---- |
+| 4    |
+| 2    |
+| 3    |
+| 1    |
+
+<br>
+
+<br>
+
+위에서 구한 유니크한 순위를 기준으로 오른쪽으로 카테고리 순위를 쫙 펼쳐보겠습니다.
+
+<br>
+
+**코드 8 - 8**  카테고리들의 순위를 횡단적으로 출력하는 쿼리
+
+```sql
+with 
+product_sale_ranking as (
+  select
+  	category_name
+  	, product_id
+  	, sales
+  	, row_number() over(partition by category_name order by sales desc) as rank
+  from
+  	product_sales
+)
+, mst_rank as (
+  select distinct rank
+  from product_sale_ranking psr
+)
+select
+  m.rank
+  , r1.product_id	as dvd
+  , r1.sales		as dvd_sales
+  , r2.product_id	as cd
+  , r2.sales		as cd_sales
+  , r3.product_id	as book
+  , r3.sales		as book_sales
+from
+	mst_rank as m
+  left join
+  	product_sale_ranking as r1
+  	on m.rank = r1."rank"
+  	and r1.category_name = 'dvd'
+  left join
+  	product_sale_ranking as r2
+  	on m.rank = r2."rank"
+  	and r2.category_name = 'cd'
+  left join
+  	product_sale_ranking as r3
+  	on m.rank = r3.rank
+  	and r3.category_name = 'book'
+order by m.rank
+;
+```
+
+| rank | dvd  | dvd_sales | cd   | cd_sales | book | book_sales |
+| ---- | ---- | --------- | ---- | -------- | ---- | ---------- |
+| 1    | D001 | 50000     | C001 | 30000    | B001 | 20000      |
+| 2    | D002 | 20000     | C002 | 20000    | B002 | 15000      |
+| 3    | D003 | 10000     | C003 | 10000    | B003 | 10000      |
+| 4    |      |           |      |          | B004 | 5000       |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 5 ]  유사 테이블 만들기
+
+p.131 부터!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
