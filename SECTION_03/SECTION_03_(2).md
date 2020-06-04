@@ -1424,7 +1424,172 @@ order by m.rank
 
 ### [ 5 ]  유사 테이블 만들기
 
-p.131 부터!
+
+
+분석을 하다 보면 '이런 테이블을 만들면, 이런 리포트를 만들 수 있을지도 몰라' 등의 생각이 떠오르는 경우가 많습니다.
+
+하지만 사용자에 따라서는 테이블 생성 권한이 없어서 그러한 아이디어를 포기할 수밖에 없는 경우가 많습니다.
+
+<br>
+
+이러한  때 유사  테이블을 만들면 테스트와 작업 효율이 크게 향상시킬 수 있습니다.
+
+<br>
+
+<br>
+
+<br>
+
+#### 임의의 레코드를 가진 유사 테이블 만들기
+
+이번 절에는 코드 값과 레이블 조합을 유사 테이블로 만들고 집계하는 방법을 소개하겠습니다.
+
+다음 코드는 SELECT 구문으로 유사 테이블을 만드는 방법입니다.
+
+<br>
+
+**코드 5 - 1**  사용자 마스터(mst_users) 테이블
+
+| user_id | register_date | register_device |
+| ------- | ------------- | --------------- |
+| U001    | 2016-08-26    | 1               |
+| U002    | 2016-08-26    | 2               |
+| U003    | 2016-08-27    | 3               |
+
+
+
+<br>
+
+**코드 8 - 9**  디바이스 ID와 이름의 마스터 테이블을 만드는 쿼리
+
+```sql
+with
+mst_devices as (
+  select 1 as device_id, 'PC' as device_name
+  union all
+  select 2 as device_id, 'SP' as device_name
+  union all
+  select 3 as device_id, '애플리케이션' as device_name
+)
+select * from mst_devices;
+```
+
+| device_id | device_name  |
+| --------- | ------------ |
+| 1         | PC           |
+| 2         | SP           |
+| 3         | 애플리케이션 |
+
+<br>
+
+<br>
+
+**코드 8 - 10**  의사 테이블을 사용해 코드를 레이블로 변환하는 쿼리
+
+```sql
+with
+mst_devices as (
+  select 1 as device_id, 'PC' as device_name
+  union all
+  select 2 as device_id, 'SP' as device_name
+  union all
+  select 3 as device_id, '애플리케이션' as device_name
+)
+select
+  *
+from
+  mst_users as u
+  left join
+  mst_devices as d
+  on u.register_device = d.device_id
+;
+```
+
+| user_id | register_date | register_device | device_id | device_name  |
+| ------- | ------------- | --------------- | --------- | ------------ |
+| U001    | 2016-08-26    | 1               | 1         | PC           |
+| U002    | 2016-08-26    | 2               | 2         | SP           |
+| U003    | 2016-08-27    | 3               | 3         | 애플리케이션 |
+
+<br>
+
+참고로 UNION ALL 은 처리가 비교적 무거우므로 레코드 수가 많아지면 성능 문제가 발생할 수 있습니다.
+
+<br>
+
+<br>
+
+<br>
+
+> VALUES 구문을 사용한 유사 테이블 만들기 
+
+각 미들웨어에서 구현하고 있는 확장 기능을 사용하면 앞의 쿼리의 성능을 개선할 수 있습니다.
+
+PostgreSQL 에서는 INSERT 구문 이외에도 VALUES 구문을 사용해 레코드를 만들 수 있으므로 다음과 같이 작성할 수 있습니다. 성능 + 가독성이 향상되었네요.
+
+<br>
+
+```sql
+with
+mst_devices(device_id,device_name) as (
+  values
+   (1, 'PC')
+  ,(2, 'SP')
+  ,(3, '애플리케이션')
+)
+select * from mst_devices;
+```
+
+| device_id | device_name  |
+| --------- | ------------ |
+| 1         | PC           |
+| 2         | SP           |
+| 3         | 애플리케이션 |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+#### 순번을 사용해 테이블 작성하기
+
+지금까지 레코드를 직접 정의해서 유사 테이블을 작성하는 방법을 설명했습니다. 하지만 레코드의 수가 다르면,<br>테이블 작성과 쿼리 관리가 귀찮습니다.
+
+<br>
+
+일부 미들웨어에는 순번을 자동 생성하는 테이블 함수가 구현되어 있습니다. 이러한 테이블 함수를 사용하면 임의의 레코드 수를 가진 유사 테이블도 쉽게 만들 수 있습니다.
+
+<br>
+
+다음 코드 예는 순번을 가진 유사 테이블을 작성하는 쿼리입니다.
+
+```sql
+with
+series as (
+  -- 1~5 까지의 순번 생성하기
+  select generate_series(1,5) as idx
+)
+select * from series;
+```
+
+| idx  |
+| ---- |
+| 1    |
+| 2    |
+| 3    |
+| 4    |
+| 5    |
+
+<br>
+
+<br>
+
+
+
+
 
 
 
