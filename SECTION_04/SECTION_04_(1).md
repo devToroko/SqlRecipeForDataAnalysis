@@ -396,7 +396,433 @@ order by month
 
 ### [ 5 ]  Z 차트로 업적의 추이 확인하기
 
-p.150 부터
+고객에게 제공하는 서비스, 상품, 콘텐츠 중에는 계절에 따라 매출이 변동하는 경우가 있습니다. 이번 절에서 소개하는 Z 차트는 '월차매출', '매출누계', '이동년계'
+
+라는 3개의 지표로 구성되어, 계절 변동의 영향을 배제하고 트렌드를 분석하는 방법입니다.
+
+<br>
+
+<br>
+
+#### Z 차트 작성
+
+ '월차매출', '매출누계', '이동년계'라는 3가지 지표가 뭔지 알고 넘어갑시다.
+
+<br>
+
+> 월차매출
+
+매출 합계를 월별로 집계합니다.
+
+<br>
+
+> 매출누계
+
+해당 월의 매출에 이전 월까지의 매출 누계를 합한 값입니다.
+
+<br>
+
+> 이동년계
+
+해당 월의 매출에 과거 11 개월의 매출을 합한 값입니다.
+
+<br>
+
+<br>
+
+<br>
+
+#### Z 차트를 분석할 때의 정리
+
+<br>
+
+> 매출누계에서 주목할 점
+
+월차매출이 일정할 경우 매출누계는 직선이 됩니다. 가로축에서 오른쪽으로 갈수록 그래프의 기울기가 급해지는 곡선이면<br>최근 매출이 상승하고 있다는 의미이며, 반대로 완만해지는 곡선이라면 매출이 감소하고 있다는 의미입니다.
+
+<br>
+
+> 이동년계에서 주목할 점
+
+작년과 올해의 매출이 일정하다면 이동년계는 직선이 됩니다.<br>오른쪽 위로 올라간다면 매출이 오르는 경향이 있다는 뜻이고, 오른쪽 아래로 내려간다면 매출이 감소하는 경향이 있다는 뜻입니다.<br>
+
+<br>
+
+<br>
+
+<br>
+
+#### Z 차트를 작성하기 위한 지표 집계하기
+
+Z 차트에 필요한 지표는 월 단위로 집계하므로, 일단 구매 로그를 기반으로 월별 매출을 집계합니다.<br>이어서 각 월의 매출에 대해 누계매출과 이동년계를 계산합니다.  이동년계를 계산하려면 특정 월의 과거 1년치<br>매출 데이터가 필요하지만, 그래프를 그릴 때는 필요하지 않으므로 없는 데이터는 신경 쓰지 않아도 괜찮습니다.<br>
+
+<br>
+
+**코드 9 - 7**  2015년 매출에 대한 Z 차트를 작성하는 쿼리
+
+```sql
+with
+daily_purchase as (
+	 select
+	    dt
+	  , substring(dt,1,4) as year
+	  , substring(dt,6,2) as month
+	  , substring(dt,9,2) as date
+	  , sum(purchase_amount) as purchase_amount
+	 from purchase_log
+	 group by dt
+)
+, monthly_amount as (
+	-- 월별 매출 집계하기
+	select
+		year
+		,month
+		,SUM(purchase_amount) as amount
+	from daily_purchase
+	group by year, month
+)
+, calc_index as (
+	select
+		year
+		,month
+		,amount
+		-- 2015년의 누계 매출 집계하기
+		,sum(case when year='2015' then amount end)
+			over(order by year,month rows unbounded preceding)
+				as agg_amount
+		--당월부터 11개월 이전까지의 매출 합계(이동년도) 집계하기
+		,sum(amount) over(order by year,month rows between 11 preceding and current row)
+			as year_avg_amount
+	from
+		monthly_amount
+	order by year,month
+)
+-- 마지막으로 2015년의 데이터만 압축하기
+select 
+	concat(year,'-',month) as year_month
+	,amount
+	,agg_amount
+	,year_avg_amount
+from 
+	calc_index
+where year = '2015'
+order by year_month
+;
+```
+
+<br>
+
+| year_month | amount | agg_amount | year_avg_amount |
+| ---------- | ------ | ---------- | --------------- |
+| 2015-01    | 22111  | 22111      | 160796          |
+| 2015-02    | 11965  | 34076      | 144292          |
+| 2015-03    | 20215  | 54291      | 145608          |
+| 2015-04    | 11792  | 66083      | 145006          |
+| 2015-05    | 18087  | 84170      | 160811          |
+| 2015-06    | 18859  | 103029     | 169490          |
+| 2015-07    | 14919  | 117948     | 180382          |
+| 2015-08    | 12906  | 130854     | 187045          |
+| 2015-09    | 5696   | 136550     | 188909          |
+| 2015-10    | 13398  | 149948     | 195591          |
+| 2015-11    | 6213   | 156161     | 185360          |
+| 2015-12    | 26024  | 182185     | 182185          |
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 6 ]  매출을 파악할 때 중요 포인트
+
+매출 집계만으로는 매출의 상승과 하락 밖에 알 수 없습니다. 따라서 매출의 상승/하락에 관한 본질적인 이유를<br>알 수 없습니다. 매출이라는 결과의 원인이라 할 수 있는 구매 횟수. 구매 단가 등의 주변 데이터를 고려해야<br>"왜"라는 이유를 알 수 있습니다. 따라서 매출 리포트가 필요하다면 주변 데이터를 함께 포함한 리포트를 만드는 것을 추천합니다.<br>
+
+<br>
+
+**코드 9 - 8**  매출과 관련된 지표를 집계하는 쿼리
+
+```sql
+with
+daily_purchase as (
+	 select
+	    dt
+	  , substring(dt,1,4) as year
+	  , substring(dt,6,2) as month
+	  , substring(dt,9,2) as date
+	  , count(order_id) as orders
+	  , sum(purchase_amount) as purchase_amount
+	 from purchase_log
+	 group by dt
+)
+, monthly_purchase as (
+	-- 월별 매출 집계하기
+	select
+		year
+		,month
+		,sum(orders) as orders
+		,avg(purchase_amount) as avg_amount
+		,SUM(purchase_amount) as monthly
+	from daily_purchase
+	group by year, month
+)
+select 
+	concat(year,'-',month) as year_month
+	,orders
+	,avg_amount
+	,monthly
+	,sum(monthly) over(partition by year order by month rows unbounded preceding)
+		as agg_amount
+	-- 12개월 전의 매출 구하기
+	,lag(monthly,12) over(order by year,month)
+		as last_year
+	-- 12개월 전의 매출과 비교해서 비율 구하기
+	, trunc(100.0 * monthly / lag(monthly,12) 
+		over(order by year,month) , 2)
+			as rate
+from
+	monthly_purchase
+order by
+	year_month
+;
+```
+
+<br>
+
+![dbeaver_w9pxN7k1Hm](SECTION_04_IMG/dbeaver_w9pxN7k1Hm.png) 
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+## 10강 - 다면적인 축을 사용해 데이터 축적하기
+
+<br>
+
+이번 10강에서는 시계열뿐만 아니라 상품의 카테고리, 가격등을 조합해서 데이터의 특징을 추출해 리포팅하는 방법을 알아보겠다.
+
+<br>
+
+<br>
+
+**샘플 데이터(purchase_detail_log)**
+
+![dbeaver_qoOq5IjvWi](SECTION_04_IMG/dbeaver_qoOq5IjvWi.png) 
+
+<br><br><br><br>
+
+<br>
+
+### [ 1 ]  카테고리별 매출과 소계 계산하기
+
+카테고리의 소계와 총계를 한 번에 출력해봅시다.
+
+<br>
+
+**코드 10 - 1**  카테고리별 매출과 소계를 동시에 구하는 쿼리
+
+```sql
+with
+sub_category_amount as (
+	-- 소 카테고리의 매출 집계하기
+	select
+		category as category
+		, sub_category as sub_category
+		, sum(price) as amount
+	from purchase_detail_log
+	group by category, sub_category
+)
+, category_amount as (
+	-- 대 카테고리의 매출 집계하기
+	select
+		category
+		,'all' as sub_category
+		, sum(price) as amount
+	from purchase_detail_log
+	group  by category
+)
+, total_amount as (
+	-- 전체 매출 집계하기
+	select
+		'all' as category
+		, 'all' as sub_category
+		, sum(price) as amount
+	from purchase_detail_log
+)
+select category,sub_category,amount from sub_category_amount
+union all
+select category,sub_category,amount from category_amount
+union all
+select category,sub_category,amount from total_amount
+;
+```
+
+<br>
+
+![dbeaver_PjR2qHFGES](SECTION_04_IMG/dbeaver_PjR2qHFGES.png) 
+
+<br>
+
+이와 같은 SQL 사용하면 하나의 쿼리로 카테고리별 소계와 총계를 동시에 계산할 수 있지만, UNION ALL  을 사용해서 <br>테이블을 결합하는 방법은 테이블을 여러번 불러오고, 뎅이터를 결합하는 비용도 발생하므로 성능이 좋지 않습니다.<br>SQL99에서 도입된 'ROLLUP' 을 구현하는 미들웨어에서는 조금 더 쉽고, 성능 좋은 쿼리를 만들 수 있습니다.<br>
+
+<br>
+
+**코드 10 - 2**  ROLLUP  을 사용해서 카테고리별 매출과 소계를 동시에 구하는 쿼리
+
+```sql
+select
+	coalesce(category,'all') as category
+	, coalesce(sub_category,'all') as sub_category
+	, sum(price) as amount
+from
+	purchase_detail_log
+group by
+	rollup(category,sub_category)
+;
+```
+
+<br>
+
+![dbeaver_SnTylhdNIx](SECTION_04_IMG/dbeaver_SnTylhdNIx.png) 
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 2 ]  ABC 분석으로 잘 팔리는 상품 판별하기
+
+ABC 분석은 재고 관리 등에서 사용하는 분석 방법이며, 매출 중요도에 따라 상품을 나누고, 그에 맞게 전략을 만들 때 사용합니다.<br>예를 들어 매출의 상위 70퍼센트를 A 등급,   상위 70~90% 는 B등급,  상위 90%~100%는 C등급 이라고 정하고 분석을하면 ABC 분석이라 할 수 있습니다.<br>
+
+<br>
+
+**코드 10 - 3**  매출 구성비누계와 ABC 등급을 계산하는 쿼리
+
+```sql
+with
+monthly_sales as (
+	select
+		category
+		,sum(price) as amount
+	from purchase_detail_log
+	where dt between '2017-01-01' and '2017-01-31'
+	group by category
+)
+, sales_composition_ratio as (
+	select
+		category
+		, amount
+		-- 구성비: 100.0 * <항목별 매출> / <전체 매출>
+		, 100.0 * amount / sum(amount) over() as composition_ratio
+		-- 구성비 누계 ㅣ 100.0 * <항목별 누계 매출> / <전체 매출>
+		, 100.0 * sum(amount) over(order by amount desc) 
+				/ sum(amount) over() as cumulative_ratio
+	from monthly_sales
+)
+select
+	*
+	-- 구성비누계 범위에 따라 순위 붙이기
+	, case
+		when cumulative_ratio between 0 and 70 then 'A'
+		when cumulative_ratio between 70 and 90 then 'B'
+		when cumulative_ratio between 90 and 100 then 'C'
+	  end as abc_rank
+from sales_composition_ratio
+order by amount desc
+;
+```
+
+<br>
+
+![dbeaver_UhV6AeXPCO](SECTION_04_IMG/dbeaver_UhV6AeXPCO.png) 
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+### [ 3 ]  팬 차트로 상품의 매출 증가율 확인하기
+
+팬 차트란 어떤 기준 시점을 100% 로 두고, 이후의 숫자 변동을 확인할 수 있게 해주는 그래프입니다.<br>카테고리별  매출 금액의 추이를 판단하는 경우, 매출 금액이 크면 쉽게 경향을 파악할 수 있지만, <br>작은 변화는 그래프에서 변화를 확인하기 매우 어렵습니다. 이로 인해 트렌드 변화와 성장 분야를 놓칠 수 있습니다.<br>
+
+<br>
+
+이번 절에서는 팬 차트를 사용하면 변화가 백분율로 표시되므로, 작은 변화도 쉽게 인지할 수 있습니다.
+
+<br>
+
+**코드 10 - 4**   팬 차트 작성 때 필요한 데이터를 구하는 쿼리
+
+```sql
+with
+detail_category_amount as (
+	select
+		dt
+		,category
+		,substring(dt,1,4) as year
+		,substring(dt,6,2) as month
+		,substring(dt,9,2) as date
+		,sum(price) as amount
+	from purchase_detail_log
+	group by dt, category
+)
+, monthly_category_amount as (
+	select
+		concat(year,'-',month) as year_month
+		, category
+		, sum(amount) as amount
+	from detail_category_amount
+	group by year,month,category
+)
+select
+	year_month
+	,category
+	,amount
+	,first_value(amount)
+		over(partition by category order by year_month, category rows unbounded preceding)
+			as base_amount
+	,100.0 * amount / first_value(amount)
+		over(partition by category order by year_month, category rows unbounded preceding)
+			as rate
+from
+	monthly_category_amount
+order by
+	year_month,category
+;
+```
+
+<br>
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
